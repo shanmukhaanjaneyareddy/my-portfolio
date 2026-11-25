@@ -1,5 +1,3 @@
-import { supabase } from "../lib/supabaseClient";
-
 export const defaultPortfolioData = {
   personal: {
     brandMain: "Shanmukh",
@@ -103,17 +101,17 @@ export function mergeWithDefaults(raw) {
 }
 
 export async function fetchLivePortfolioData() {
-  if (supabase) {
-    const { data, error } = await supabase
-      .from("portfolio_config")
-      .select("data")
-      .eq("id", 1)
-      .maybeSingle();
-
-    if (!error && data?.data) {
-      localStorage.setItem("portfolio_cms_data_v1", JSON.stringify(data.data));
-      return mergeWithDefaults(data.data);
+  try {
+    const res = await fetch("/api/portfolio");
+    if (res.ok) {
+      const json = await res.json();
+      if (json?.data) {
+        localStorage.setItem("portfolio_cms_data_v1", JSON.stringify(json.data));
+        return mergeWithDefaults(json.data);
+      }
     }
+  } catch (e) {
+    console.error("Live fetch error:", e);
   }
 
   try {
@@ -128,20 +126,18 @@ export async function fetchLivePortfolioData() {
 export async function saveLivePortfolioData(updatedData) {
   localStorage.setItem("portfolio_cms_data_v1", JSON.stringify(updatedData));
 
-  if (!supabase) {
-    return { ok: false, reason: "Supabase keys not configured in .env" };
+  try {
+    const res = await fetch("/api/portfolio", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data: updatedData }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      return { ok: false, reason: json?.error || "Server sync failed" };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: err.message || "Network error" };
   }
-
-  const { error } = await supabase.from("portfolio_config").upsert({
-    id: 1,
-    data: updatedData,
-    updated_at: new Date().toISOString(),
-  });
-
-  if (error) {
-    console.error("Supabase save error:", error);
-    return { ok: false, reason: error.message };
-  }
-
-  return { ok: true };
 }
