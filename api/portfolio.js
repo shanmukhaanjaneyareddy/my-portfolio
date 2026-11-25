@@ -1,6 +1,7 @@
 export default async function handler(req, res) {
-  const supabaseUrl = process.env.VITE_SUPABASE_URL;
-  const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+  const rawUrl = process.env.VITE_SUPABASE_URL || "";
+  const supabaseUrl = rawUrl.trim().replace(/\/+$/, "");
+  const supabaseAnonKey = (process.env.VITE_SUPABASE_ANON_KEY || "").trim();
 
   if (!supabaseUrl || !supabaseAnonKey) {
     return res.status(500).json({ error: "Supabase environment variables missing on Vercel" });
@@ -24,7 +25,8 @@ export default async function handler(req, res) {
     }
 
     if (req.method === "POST") {
-      const { data } = req.body || {};
+      const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+      const { data } = body || {};
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -49,6 +51,10 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ error: "Method not allowed" });
   } catch (err) {
-    return res.status(500).json({ error: err.message || "Proxy fetch failed" });
+    const detail = err?.cause?.code || err?.cause?.message || err.message || "Proxy fetch failed";
+    return res.status(500).json({
+      error: `Proxy error: ${detail}`,
+      urlChecked: supabaseUrl,
+    });
   }
 }
