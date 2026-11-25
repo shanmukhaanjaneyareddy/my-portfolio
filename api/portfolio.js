@@ -1,10 +1,17 @@
 export default async function handler(req, res) {
-  const rawUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
+  const rawUrl =
+    process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    "https://qjxsukwqjxykncwqqdz.supabase.co";
   const supabaseUrl = rawUrl.trim().replace(/\/+$/, "");
-  const supabaseAnonKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "").trim();
+  const supabaseAnonKey = (
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    ""
+  ).trim();
 
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return res.status(500).json({ error: "Supabase environment variables missing on Vercel" });
+  if (!supabaseAnonKey) {
+    return res.status(500).json({ error: "SUPABASE_ANON_KEY missing on Vercel" });
   }
 
   const endpoint = `${supabaseUrl}/rest/v1/portfolio_config`;
