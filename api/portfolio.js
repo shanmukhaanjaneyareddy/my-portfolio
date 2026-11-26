@@ -9,6 +9,7 @@ export default async function handler(req, res) {
     process.env.VITE_SUPABASE_ANON_KEY ||
     ""
   ).trim();
+  const rowId = Number(process.env.PORTFOLIO_ROW_ID || "1");
 
   if (!supabaseAnonKey) {
     return res.status(500).json({ error: "SUPABASE_ANON_KEY missing on Vercel" });
@@ -18,7 +19,7 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === "GET") {
-      const response = await fetch(`${endpoint}?id=eq.1&select=data`, {
+      const response = await fetch(`${endpoint}?id=eq.${rowId}&select=data`, {
         headers: {
           apikey: supabaseAnonKey,
           Authorization: `Bearer ${supabaseAnonKey}`,
@@ -43,7 +44,7 @@ export default async function handler(req, res) {
           Prefer: "resolution=merge-duplicates",
         },
         body: JSON.stringify({
-          id: 1,
+          id: rowId,
           data,
           updated_at: new Date().toISOString(),
         }),
