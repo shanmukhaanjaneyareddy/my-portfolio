@@ -5,6 +5,8 @@ import {
   Save,
   Check,
   ArrowLeft,
+  ArrowUp,
+  ArrowDown,
   Plus,
   Trash2,
   Edit3,
@@ -16,6 +18,7 @@ import {
   Mail,
   Cloud,
   AlertCircle,
+  GraduationCap,
 } from "lucide-react";
 import {
   defaultPortfolioData,
@@ -24,6 +27,20 @@ import {
 } from "../data/portfolioData";
 
 const ADMIN_PASSKEY = "Shanmukh@2026";
+
+const CREDENTIAL_ORDER_META = {
+  education: "Education Qualifications",
+  internships: "Internships & Simulations",
+  certifications: "Certifications",
+};
+
+function normalizeLink(url) {
+  if (!url) return "";
+  const trimmed = url.trim();
+  if (!trimmed || trimmed === "#") return "";
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
 
 export default function AdminPortal({ data, setData }) {
   const [authenticated, setAuthenticated] = useState(false);
@@ -34,6 +51,7 @@ export default function AdminPortal({ data, setData }) {
   const [syncStatus, setSyncStatus] = useState("idle");
   const [syncErrorMsg, setSyncErrorMsg] = useState("");
 
+  // Projects State
   const [editingProjectId, setEditingProjectId] = useState(null);
   const [projectForm, setProjectForm] = useState({
     title: "",
@@ -45,8 +63,37 @@ export default function AdminPortal({ data, setData }) {
     githubUrl: "https://github.com/shanmukhaanjaneyareddy",
   });
 
+  // Skills State
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newSkillInputs, setNewSkillInputs] = useState({});
+
+  // Education State
+  const [editingEduId, setEditingEduId] = useState(null);
+  const [eduForm, setEduForm] = useState({
+    degree: "",
+    institution: "",
+    location: "",
+    period: "",
+    highlights: "",
+  });
+
+  // Internships State
+  const [editingInternId, setEditingInternId] = useState(null);
+  const [internForm, setInternForm] = useState({
+    role: "",
+    organization: "",
+    period: "",
+    description: "",
+  });
+
+  // Certifications State
+  const [editingCertId, setEditingCertId] = useState(null);
+  const [certForm, setCertForm] = useState({
+    title: "",
+    issuer: "",
+    date: "",
+    credentialUrl: "",
+  });
 
   useEffect(() => {
     if (sessionStorage.getItem("portfolio_admin_auth") === "true") {
@@ -85,7 +132,6 @@ export default function AdminPortal({ data, setData }) {
     }
   };
 
-  // Local state updates while typing (no network spam)
   const updatePersonalField = (field, value) => {
     setData((prev) => ({
       ...prev,
@@ -110,12 +156,42 @@ export default function AdminPortal({ data, setData }) {
     }));
   };
 
+  const handleMoveCredentialSection = async (index, direction) => {
+    const currentOrder = [
+      ...(data.credentialsOrder || [
+        "education",
+        "internships",
+        "certifications",
+      ]),
+    ];
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= currentOrder.length) return;
+
+    const [moved] = currentOrder.splice(index, 1);
+    currentOrder.splice(targetIndex, 0, moved);
+    await persistData({ ...data, credentialsOrder: currentOrder });
+  };
+
+  const handleMoveListItem = async (listKey, index, direction) => {
+    const list = [...(data[listKey] || [])];
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= list.length) return;
+
+    const [moved] = list.splice(index, 1);
+    list.splice(targetIndex, 0, moved);
+    await persistData({ ...data, [listKey]: list });
+  };
+
+  // Projects Handlers
   const handleSaveProject = async (e) => {
     e.preventDefault();
     const techArray = projectForm.techText
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean);
+
+    const formattedLiveUrl = normalizeLink(projectForm.liveUrl);
+    const formattedGithubUrl = normalizeLink(projectForm.githubUrl);
 
     if (editingProjectId) {
       const updatedProjects = data.projects.map((p) =>
@@ -127,8 +203,8 @@ export default function AdminPortal({ data, setData }) {
               featured: projectForm.featured,
               description: projectForm.description,
               tech: techArray,
-              liveUrl: projectForm.liveUrl || "#",
-              githubUrl: projectForm.githubUrl || "#",
+              liveUrl: formattedLiveUrl,
+              githubUrl: formattedGithubUrl,
             }
           : p
       );
@@ -142,8 +218,8 @@ export default function AdminPortal({ data, setData }) {
         featured: projectForm.featured,
         description: projectForm.description,
         tech: techArray,
-        liveUrl: projectForm.liveUrl || "#",
-        githubUrl: projectForm.githubUrl || "#",
+        liveUrl: formattedLiveUrl,
+        githubUrl: formattedGithubUrl,
       };
       await persistData({ ...data, projects: [...data.projects, newProj] });
     }
@@ -166,19 +242,22 @@ export default function AdminPortal({ data, setData }) {
       category: proj.category,
       featured: Boolean(proj.featured),
       description: proj.description,
-      techText: proj.tech.join(", "),
-      liveUrl: proj.liveUrl,
-      githubUrl: proj.githubUrl,
+      techText: (proj.tech || []).join(", "),
+      liveUrl: proj.liveUrl === "#" ? "" : proj.liveUrl || "",
+      githubUrl: proj.githubUrl === "#" ? "" : proj.githubUrl || "",
     });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleDeleteProject = (id) => {
+    if (editingProjectId === id) setEditingProjectId(null);
     persistData({
       ...data,
       projects: data.projects.filter((p) => p.id !== id),
     });
   };
 
+  // Skills Handlers
   const handleAddCategory = (e) => {
     e.preventDefault();
     if (!newCategoryName.trim()) return;
@@ -218,6 +297,151 @@ export default function AdminPortal({ data, setData }) {
         : cat
     );
     persistData({ ...data, skills: updatedSkills });
+  };
+
+  // Education Handlers (Add + Edit)
+  const handleSaveEducation = async (e) => {
+    e.preventDefault();
+    if (!eduForm.degree.trim() || !eduForm.institution.trim()) return;
+
+    if (editingEduId) {
+      const updatedEdu = (data.education || []).map((item) =>
+        item.id === editingEduId ? { ...item, ...eduForm } : item
+      );
+      await persistData({ ...data, education: updatedEdu });
+      setEditingEduId(null);
+    } else {
+      await persistData({
+        ...data,
+        education: [...(data.education || []), { id: Date.now(), ...eduForm }],
+      });
+    }
+
+    setEduForm({
+      degree: "",
+      institution: "",
+      location: "",
+      period: "",
+      highlights: "",
+    });
+  };
+
+  const handleEditEducationClick = (edu) => {
+    setEditingEduId(edu.id);
+    setEduForm({
+      degree: edu.degree || "",
+      institution: edu.institution || "",
+      location: edu.location || "",
+      period: edu.period || "",
+      highlights: edu.highlights || "",
+    });
+  };
+
+  const handleDeleteEducation = (id) => {
+    if (editingEduId === id) setEditingEduId(null);
+    persistData({
+      ...data,
+      education: (data.education || []).filter((e) => e.id !== id),
+    });
+  };
+
+  // Internships Handlers (Add + Edit)
+  const handleSaveInternship = async (e) => {
+    e.preventDefault();
+    if (!internForm.role.trim() || !internForm.organization.trim()) return;
+
+    if (editingInternId) {
+      const updatedInterns = (data.internships || []).map((item) =>
+        item.id === editingInternId ? { ...item, ...internForm } : item
+      );
+      await persistData({ ...data, internships: updatedInterns });
+      setEditingInternId(null);
+    } else {
+      await persistData({
+        ...data,
+        internships: [
+          ...(data.internships || []),
+          { id: Date.now(), ...internForm },
+        ],
+      });
+    }
+
+    setInternForm({
+      role: "",
+      organization: "",
+      period: "",
+      description: "",
+    });
+  };
+
+  const handleEditInternshipClick = (intern) => {
+    setEditingInternId(intern.id);
+    setInternForm({
+      role: intern.role || "",
+      organization: intern.organization || "",
+      period: intern.period || "",
+      description: intern.description || "",
+    });
+  };
+
+  const handleDeleteInternship = (id) => {
+    if (editingInternId === id) setEditingInternId(null);
+    persistData({
+      ...data,
+      internships: (data.internships || []).filter((i) => i.id !== id),
+    });
+  };
+
+  // Certifications Handlers (Add + Edit)
+  const handleSaveCertification = async (e) => {
+    e.preventDefault();
+    if (!certForm.title.trim() || !certForm.issuer.trim()) return;
+
+    const payload = {
+      ...certForm,
+      credentialUrl: normalizeLink(certForm.credentialUrl),
+    };
+
+    if (editingCertId) {
+      const updatedCerts = (data.certifications || []).map((item) =>
+        item.id === editingCertId ? { ...item, ...payload } : item
+      );
+      await persistData({ ...data, certifications: updatedCerts });
+      setEditingCertId(null);
+    } else {
+      await persistData({
+        ...data,
+        certifications: [
+          ...(data.certifications || []),
+          { id: Date.now(), ...payload },
+        ],
+      });
+    }
+
+    setCertForm({
+      title: "",
+      issuer: "",
+      date: "",
+      credentialUrl: "",
+    });
+  };
+
+  const handleEditCertificationClick = (cert) => {
+    setEditingCertId(cert.id);
+    setCertForm({
+      title: cert.title || "",
+      issuer: cert.issuer || "",
+      date: cert.date || "",
+      credentialUrl: cert.credentialUrl || "",
+    });
+  };
+
+  const handleDeleteCertification = (id) => {
+    if (editingCertId === id) setEditingCertId(null);
+    persistData({
+      ...data,
+      certifications: (data.certifications || []).filter((c) => c.id !== id),
+    });
   };
 
   if (!authenticated) {
@@ -278,8 +502,19 @@ export default function AdminPortal({ data, setData }) {
     { id: "general", label: "Hero & Resume", icon: User },
     { id: "projects", label: "Projects", icon: FolderPlus },
     { id: "skills", label: "Skills", icon: Cpu },
+    { id: "credentials", label: "Education & Certs", icon: GraduationCap },
     { id: "contact", label: "Contact & Footer", icon: Mail },
   ];
+
+  const currentOrder = data.credentialsOrder || [
+    "education",
+    "internships",
+    "certifications",
+  ];
+
+  const educationList = data.education || [];
+  const internshipList = data.internships || [];
+  const certificationList = data.certifications || [];
 
   return (
     <div className="min-h-screen bg-dark-950 text-slate-100 py-10 px-6">
@@ -500,9 +735,14 @@ export default function AdminPortal({ data, setData }) {
               onSubmit={handleSaveProject}
               className="rounded-2xl glass-card p-6 sm:p-8 space-y-4"
             >
-              <h2 className="text-lg font-bold">
-                {editingProjectId ? "Edit Project" : "Add New Project"}
-              </h2>
+              <div>
+                <h2 className="text-lg font-bold">
+                  {editingProjectId ? "Edit Project" : "Add New Project"}
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Clicking any project card on your public portfolio redirects directly to its Live Project URL (or GitHub URL if no live demo link is set).
+                </p>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -576,10 +816,11 @@ export default function AdminPortal({ data, setData }) {
 
                 <div>
                   <label className="block text-xs font-mono text-slate-400 mb-1">
-                    LIVE PROJECT URL
+                    LIVE PROJECT URL (CARD REDIRECT LINK)
                   </label>
                   <input
-                    type="url"
+                    type="text"
+                    placeholder="https://your-project.vercel.app/"
                     value={projectForm.liveUrl}
                     onChange={(e) =>
                       setProjectForm({
@@ -596,7 +837,8 @@ export default function AdminPortal({ data, setData }) {
                     GITHUB REPO URL
                   </label>
                   <input
-                    type="url"
+                    type="text"
+                    placeholder="https://github.com/..."
                     value={projectForm.githubUrl}
                     onChange={(e) =>
                       setProjectForm({
@@ -662,7 +904,7 @@ export default function AdminPortal({ data, setData }) {
             </form>
 
             <div className="space-y-3">
-              {data.projects.map((proj) => (
+              {data.projects.map((proj, idx) => (
                 <div
                   key={proj.id}
                   className="rounded-2xl glass-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
@@ -682,10 +924,34 @@ export default function AdminPortal({ data, setData }) {
                     <p className="text-xs text-slate-400 mt-1 line-clamp-2">
                       {proj.description}
                     </p>
+                    {proj.liveUrl && proj.liveUrl !== "#" && (
+                      <p className="text-[11px] font-mono text-sky-400 mt-1 truncate max-w-md">
+                        {proj.liveUrl}
+                      </p>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button
+                      type="button"
+                      disabled={idx === 0}
+                      onClick={() => handleMoveListItem("projects", idx, -1)}
+                      className="p-2 rounded-xl glass-card disabled:opacity-30 disabled:pointer-events-none text-slate-200"
+                      title="Move Project Up"
+                    >
+                      <ArrowUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={idx === data.projects.length - 1}
+                      onClick={() => handleMoveListItem("projects", idx, 1)}
+                      className="p-2 rounded-xl glass-card disabled:opacity-30 disabled:pointer-events-none text-slate-200"
+                      title="Move Project Down"
+                    >
+                      <ArrowDown className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => handleEditProjectClick(proj)}
                       className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl glass-card text-xs text-slate-200 hover:border-accent-primary/40"
                     >
@@ -693,6 +959,7 @@ export default function AdminPortal({ data, setData }) {
                       Edit
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleDeleteProject(proj.id)}
                       className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl glass-card text-xs text-rose-400 hover:border-rose-400/40"
                     >
@@ -794,6 +1061,544 @@ export default function AdminPortal({ data, setData }) {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "credentials" && (
+          <div className="space-y-8">
+            {/* Section Display Order Controller */}
+            <div className="rounded-2xl glass-card p-6 sm:p-8 space-y-4">
+              <div>
+                <h2 className="text-lg font-bold">Section Display Order</h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Reorder how Education, Internships, and Certifications appear on your public portfolio.
+                </p>
+              </div>
+
+              <div className="space-y-2.5">
+                {currentOrder.map((key, idx) => (
+                  <div
+                    key={key}
+                    className="p-3.5 rounded-xl bg-dark-900/90 border border-white/10 flex items-center justify-between gap-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-lg bg-accent-primary/15 text-accent-primary font-mono text-xs flex items-center justify-center font-bold">
+                        {idx + 1}
+                      </span>
+                      <span className="text-sm font-semibold text-slate-100">
+                        {CREDENTIAL_ORDER_META[key] || key}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => handleMoveCredentialSection(idx, -1)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-xs text-slate-200"
+                        title="Move Section Up"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                        Up
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === currentOrder.length - 1}
+                        onClick={() => handleMoveCredentialSection(idx, 1)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-xs text-slate-200"
+                        title="Move Section Down"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                        Down
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Education Manager (Add, Edit & Reorder) */}
+            <div className="rounded-2xl glass-card p-6 sm:p-8 space-y-5">
+              <div>
+                <h2 className="text-lg font-bold">
+                  {editingEduId
+                    ? "Edit Education Qualification"
+                    : "Education Qualifications"}
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Add, edit (percentage, year, institution), or reorder B.Sc., Inter, and SSC entries.
+                </p>
+              </div>
+              <form
+                onSubmit={handleSaveEducation}
+                className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+              >
+                <input
+                  type="text"
+                  required
+                  placeholder="Degree / Class (e.g., B.Sc. AI, Intermediate, SSC)"
+                  value={eduForm.degree}
+                  onChange={(e) =>
+                    setEduForm({ ...eduForm, degree: e.target.value })
+                  }
+                  className="px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                />
+                <input
+                  type="text"
+                  required
+                  placeholder="Institution / School Name"
+                  value={eduForm.institution}
+                  onChange={(e) =>
+                    setEduForm({ ...eduForm, institution: e.target.value })
+                  }
+                  className="px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="Location (e.g., Rajahmundry, AP)"
+                  value={eduForm.location}
+                  onChange={(e) =>
+                    setEduForm({ ...eduForm, location: e.target.value })
+                  }
+                  className="px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="Period / Year (e.g., 2025 – Present)"
+                  value={eduForm.period}
+                  onChange={(e) =>
+                    setEduForm({ ...eduForm, period: e.target.value })
+                  }
+                  className="px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="Highlights / Percentage / CGPA"
+                  value={eduForm.highlights}
+                  onChange={(e) =>
+                    setEduForm({ ...eduForm, highlights: e.target.value })
+                  }
+                  className="sm:col-span-2 px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                />
+                <div className="sm:col-span-2 flex items-center gap-3">
+                  <button
+                    type="submit"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-primary text-dark-950 font-semibold text-xs hover:bg-sky-300"
+                  >
+                    {editingEduId ? (
+                      <>
+                        <Save className="w-4 h-4" />
+                        Update Education
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        Add Education
+                      </>
+                    )}
+                  </button>
+                  {editingEduId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingEduId(null);
+                        setEduForm({
+                          degree: "",
+                          institution: "",
+                          location: "",
+                          period: "",
+                          highlights: "",
+                        });
+                      }}
+                      className="px-4 py-2.5 rounded-xl glass-card text-xs text-slate-300"
+                    >
+                      Cancel Edit
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              <div className="space-y-3 pt-2">
+                {educationList.map((edu, idx) => (
+                  <div
+                    key={edu.id}
+                    className="p-4 rounded-xl bg-dark-900/80 border border-white/10 flex flex-wrap items-center justify-between gap-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-lg bg-accent-primary/15 text-accent-primary font-mono text-xs flex items-center justify-center font-bold shrink-0">
+                        {idx + 1}
+                      </span>
+                      <div>
+                        <p className="text-sm font-bold">{edu.degree}</p>
+                        <p className="text-xs text-slate-400">
+                          {edu.institution} • {edu.period}
+                        </p>
+                        {edu.highlights && (
+                          <p className="text-xs text-slate-300 mt-0.5">
+                            {edu.highlights}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => handleMoveListItem("education", idx, -1)}
+                        className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-slate-200"
+                        title="Move Up"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === educationList.length - 1}
+                        onClick={() => handleMoveListItem("education", idx, 1)}
+                        className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-slate-200"
+                        title="Move Down"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleEditEducationClick(edu)}
+                        className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-slate-200"
+                        title="Edit Education"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteEducation(edu.id)}
+                        className="p-2 text-rose-400 hover:bg-white/5 rounded-lg"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Internships Manager (Add, Edit & Reorder) */}
+            <div className="rounded-2xl glass-card p-6 sm:p-8 space-y-5">
+              <div>
+                <h2 className="text-lg font-bold">
+                  {editingInternId
+                    ? "Edit Internship / Simulation"
+                    : "Internships & Simulations"}
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Add, edit details, or reorder your internships and simulations.
+                </p>
+              </div>
+              <form
+                onSubmit={handleSaveInternship}
+                className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+              >
+                <input
+                  type="text"
+                  required
+                  placeholder="Role / Program Title"
+                  value={internForm.role}
+                  onChange={(e) =>
+                    setInternForm({ ...internForm, role: e.target.value })
+                  }
+                  className="px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                />
+                <input
+                  type="text"
+                  required
+                  placeholder="Organization (e.g., Deloitte Australia / Forage)"
+                  value={internForm.organization}
+                  onChange={(e) =>
+                    setInternForm({
+                      ...internForm,
+                      organization: e.target.value,
+                    })
+                  }
+                  className="px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="Period (e.g., 2026)"
+                  value={internForm.period}
+                  onChange={(e) =>
+                    setInternForm({ ...internForm, period: e.target.value })
+                  }
+                  className="px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="Key Responsibilities / Outcome"
+                  value={internForm.description}
+                  onChange={(e) =>
+                    setInternForm({
+                      ...internForm,
+                      description: e.target.value,
+                    })
+                  }
+                  className="px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                />
+                <div className="sm:col-span-2 flex items-center gap-3">
+                  <button
+                    type="submit"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-primary text-dark-950 font-semibold text-xs hover:bg-sky-300"
+                  >
+                    {editingInternId ? (
+                      <>
+                        <Save className="w-4 h-4" />
+                        Update Internship
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        Add Internship
+                      </>
+                    )}
+                  </button>
+                  {editingInternId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingInternId(null);
+                        setInternForm({
+                          role: "",
+                          organization: "",
+                          period: "",
+                          description: "",
+                        });
+                      }}
+                      className="px-4 py-2.5 rounded-xl glass-card text-xs text-slate-300"
+                    >
+                      Cancel Edit
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              <div className="space-y-3 pt-2">
+                {internshipList.map((intern, idx) => (
+                  <div
+                    key={intern.id}
+                    className="p-4 rounded-xl bg-dark-900/80 border border-white/10 flex flex-wrap items-center justify-between gap-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-lg bg-accent-secondary/15 text-accent-secondary font-mono text-xs flex items-center justify-center font-bold shrink-0">
+                        {idx + 1}
+                      </span>
+                      <div>
+                        <p className="text-sm font-bold">{intern.role}</p>
+                        <p className="text-xs text-slate-400">
+                          {intern.organization} • {intern.period}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() =>
+                          handleMoveListItem("internships", idx, -1)
+                        }
+                        className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-slate-200"
+                        title="Move Up"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === internshipList.length - 1}
+                        onClick={() =>
+                          handleMoveListItem("internships", idx, 1)
+                        }
+                        className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-slate-200"
+                        title="Move Down"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleEditInternshipClick(intern)}
+                        className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-slate-200"
+                        title="Edit Internship"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteInternship(intern.id)}
+                        className="p-2 text-rose-400 hover:bg-white/5 rounded-lg"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Certifications Manager (Add, Edit & Reorder) */}
+            <div className="rounded-2xl glass-card p-6 sm:p-8 space-y-5">
+              <div>
+                <h2 className="text-lg font-bold">
+                  {editingCertId ? "Edit Certification" : "Certifications"}
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Add, edit certificate name/issuer/link, or reorder your certifications.
+                </p>
+              </div>
+              <form
+                onSubmit={handleSaveCertification}
+                className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+              >
+                <input
+                  type="text"
+                  required
+                  placeholder="Certificate Title"
+                  value={certForm.title}
+                  onChange={(e) =>
+                    setCertForm({ ...certForm, title: e.target.value })
+                  }
+                  className="px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                />
+                <input
+                  type="text"
+                  required
+                  placeholder="Issuing Organization (e.g., Microsoft & LinkedIn)"
+                  value={certForm.issuer}
+                  onChange={(e) =>
+                    setCertForm({ ...certForm, issuer: e.target.value })
+                  }
+                  className="px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="Date / Year (e.g., May 2026)"
+                  value={certForm.date}
+                  onChange={(e) =>
+                    setCertForm({ ...certForm, date: e.target.value })
+                  }
+                  className="px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="Credential / Drive Link (Optional)"
+                  value={certForm.credentialUrl}
+                  onChange={(e) =>
+                    setCertForm({
+                      ...certForm,
+                      credentialUrl: e.target.value,
+                    })
+                  }
+                  className="px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                />
+                <div className="sm:col-span-2 flex items-center gap-3">
+                  <button
+                    type="submit"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-primary text-dark-950 font-semibold text-xs hover:bg-sky-300"
+                  >
+                    {editingCertId ? (
+                      <>
+                        <Save className="w-4 h-4" />
+                        Update Certification
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        Add Certification
+                      </>
+                    )}
+                  </button>
+                  {editingCertId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingCertId(null);
+                        setCertForm({
+                          title: "",
+                          issuer: "",
+                          date: "",
+                          credentialUrl: "",
+                        });
+                      }}
+                      className="px-4 py-2.5 rounded-xl glass-card text-xs text-slate-300"
+                    >
+                      Cancel Edit
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              <div className="space-y-3 pt-2">
+                {certificationList.map((cert, idx) => (
+                  <div
+                    key={cert.id}
+                    className="p-4 rounded-xl bg-dark-900/80 border border-white/10 flex flex-wrap items-center justify-between gap-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-400 font-mono text-xs flex items-center justify-center font-bold shrink-0">
+                        {idx + 1}
+                      </span>
+                      <div>
+                        <p className="text-sm font-bold">{cert.title}</p>
+                        <p className="text-xs text-slate-400">
+                          {cert.issuer} • {cert.date}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() =>
+                          handleMoveListItem("certifications", idx, -1)
+                        }
+                        className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-slate-200"
+                        title="Move Up"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === certificationList.length - 1}
+                        onClick={() =>
+                          handleMoveListItem("certifications", idx, 1)
+                        }
+                        className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-slate-200"
+                        title="Move Down"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleEditCertificationClick(cert)}
+                        className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-slate-200"
+                        title="Edit Certification"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCertification(cert.id)}
+                        className="p-2 text-rose-400 hover:bg-white/5 rounded-lg"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}

@@ -70,6 +70,62 @@ export const defaultPortfolioData = {
     },
   ],
 
+  credentialsOrder: ["education", "internships", "certifications"],
+
+  education: [
+    {
+      id: 1,
+      degree: "Bachelor of Science (B.Sc.) in Artificial Intelligence",
+      institution: "Aditya Degree College (Autonomous)",
+      location: "Rajahmundry, Andhra Pradesh",
+      period: "2025 – Present",
+      highlights:
+        "Focusing on Artificial Intelligence, Python, C, Java, Data Structures, and full-stack software engineering.",
+    },
+  ],
+
+  internships: [
+    {
+      id: 1,
+      role: "Data Analytics Virtual Job Simulation",
+      organization: "Deloitte Australia (Forage)",
+      period: "2026",
+      description:
+        "Completed practical data analysis, forensic technology, and client reporting tasks using structured datasets and analytical dashboards.",
+    },
+  ],
+
+  certifications: [
+    {
+      id: 1,
+      title: "Career Essentials in Generative AI",
+      issuer: "Microsoft & LinkedIn",
+      date: "2026",
+      credentialUrl: "",
+    },
+    {
+      id: 2,
+      title: "Learning Microsoft 365 Copilot for Work",
+      issuer: "Microsoft & LinkedIn",
+      date: "2026",
+      credentialUrl: "",
+    },
+    {
+      id: 3,
+      title: "Python Essentials & C Essentials",
+      issuer: "Cisco Networking Academy",
+      date: "May 2026",
+      credentialUrl: "",
+    },
+    {
+      id: 4,
+      title: "EF SET English Certificate (C2 Proficient)",
+      issuer: "EF Standard English Test",
+      date: "2026",
+      credentialUrl: "",
+    },
+  ],
+
   contact: {
     eyebrow: "Get In Touch",
     heading: "Let's build something together.",
@@ -92,11 +148,30 @@ export function getDirectDriveDownloadUrl(url) {
 }
 
 export function mergeWithDefaults(raw) {
+  const defaultOrder = ["education", "internships", "certifications"];
+  const rawOrder = Array.isArray(raw?.credentialsOrder)
+    ? raw.credentialsOrder.filter((k) => defaultOrder.includes(k))
+    : [];
+  const mergedOrder = [
+    ...rawOrder,
+    ...defaultOrder.filter((k) => !rawOrder.includes(k)),
+  ];
+
   return {
     ...defaultPortfolioData,
     ...raw,
     personal: { ...defaultPortfolioData.personal, ...(raw?.personal || {}) },
     contact: { ...defaultPortfolioData.contact, ...(raw?.contact || {}) },
+    credentialsOrder: mergedOrder,
+    education: Array.isArray(raw?.education)
+      ? raw.education
+      : defaultPortfolioData.education,
+    internships: Array.isArray(raw?.internships)
+      ? raw.internships
+      : defaultPortfolioData.internships,
+    certifications: Array.isArray(raw?.certifications)
+      ? raw.certifications
+      : defaultPortfolioData.certifications,
   };
 }
 
