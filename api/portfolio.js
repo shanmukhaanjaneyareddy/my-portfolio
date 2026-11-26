@@ -9,7 +9,7 @@ export default async function handler(req, res) {
     process.env.VITE_SUPABASE_ANON_KEY ||
     ""
   ).trim();
-  const rowId = Number(process.env.PORTFOLIO_ROW_ID || "1");
+  const rowId = 1;
 
   if (!supabaseAnonKey) {
     return res.status(500).json({ error: "SUPABASE_ANON_KEY missing on Vercel" });

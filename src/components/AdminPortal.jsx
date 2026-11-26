@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Lock,
+  KeyRound,
   Save,
   Check,
   ArrowLeft,
@@ -26,7 +27,8 @@ import {
   saveLivePortfolioData,
 } from "../data/portfolioData";
 
-const ADMIN_PASSKEY = "Shanmukh@2026";
+const DEFAULT_ADMIN_PASSKEY = "Shanmukh@2026";
+const SESSION_AUTH_KEY = "portfolio_admin_auth_shanmukh";
 
 const CREDENTIAL_ORDER_META = {
   education: "Education Qualifications",
@@ -47,11 +49,15 @@ export default function AdminPortal({ data, setData }) {
   const [passkeyInput, setPasskeyInput] = useState("");
   const [error, setError] = useState("");
 
+  const [currentPassInput, setCurrentPassInput] = useState("");
+  const [newPassInput, setNewPassInput] = useState("");
+  const [confirmPassInput, setConfirmPassInput] = useState("");
+  const [passChangeFeedback, setPassChangeFeedback] = useState({ type: "", text: "" });
+
   const [activeTab, setActiveTab] = useState("general");
   const [syncStatus, setSyncStatus] = useState("idle");
   const [syncErrorMsg, setSyncErrorMsg] = useState("");
 
-  // Projects State
   const [editingProjectId, setEditingProjectId] = useState(null);
   const [projectForm, setProjectForm] = useState({
     title: "",
@@ -60,14 +66,12 @@ export default function AdminPortal({ data, setData }) {
     description: "",
     techText: "",
     liveUrl: "",
-    githubUrl: "https://github.com/shanmukhaanjaneyareddy",
+    githubUrl: "https://github.com/",
   });
 
-  // Skills State
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newSkillInputs, setNewSkillInputs] = useState({});
 
-  // Education State
   const [editingEduId, setEditingEduId] = useState(null);
   const [eduForm, setEduForm] = useState({
     degree: "",
@@ -77,7 +81,6 @@ export default function AdminPortal({ data, setData }) {
     highlights: "",
   });
 
-  // Internships State
   const [editingInternId, setEditingInternId] = useState(null);
   const [internForm, setInternForm] = useState({
     role: "",
@@ -86,7 +89,6 @@ export default function AdminPortal({ data, setData }) {
     description: "",
   });
 
-  // Certifications State
   const [editingCertId, setEditingCertId] = useState(null);
   const [certForm, setCertForm] = useState({
     title: "",
@@ -95,8 +97,10 @@ export default function AdminPortal({ data, setData }) {
     credentialUrl: "",
   });
 
+  const activePasskey = (data?.adminPasskey || "").trim() || DEFAULT_ADMIN_PASSKEY;
+
   useEffect(() => {
-    if (sessionStorage.getItem("portfolio_admin_auth") === "true") {
+    if (sessionStorage.getItem(SESSION_AUTH_KEY) === "true") {
       setAuthenticated(true);
     }
   }, []);
@@ -109,26 +113,79 @@ export default function AdminPortal({ data, setData }) {
       setSyncStatus("saved");
       setSyncErrorMsg("");
       setTimeout(() => setSyncStatus("idle"), 2500);
+      return true;
     } else {
       setSyncStatus("error");
       setSyncErrorMsg(result.reason || "Cloud sync failed");
+      return false;
     }
   };
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (passkeyInput === ADMIN_PASSKEY) {
+    if (passkeyInput === activePasskey) {
       setAuthenticated(true);
-      sessionStorage.setItem("portfolio_admin_auth", "true");
+      sessionStorage.setItem(SESSION_AUTH_KEY, "true");
       setError("");
     } else {
       setError("Incorrect passkey.");
     }
   };
 
+  const handleChangePasskey = async (e) => {
+    e.preventDefault();
+    setPassChangeFeedback({ type: "", text: "" });
+
+    if (currentPassInput !== activePasskey) {
+      setPassChangeFeedback({
+        type: "error",
+        text: "Current passkey is incorrect.",
+      });
+      return;
+    }
+    if (newPassInput.trim().length < 4) {
+      setPassChangeFeedback({
+        type: "error",
+        text: "New passkey must be at least 4 characters.",
+      });
+      return;
+    }
+    if (newPassInput !== confirmPassInput) {
+      setPassChangeFeedback({
+        type: "error",
+        text: "New passkey and confirmation do not match.",
+      });
+      return;
+    }
+
+    const ok = await persistData({
+      ...data,
+      adminPasskey: newPassInput.trim(),
+    });
+
+    setCurrentPassInput("");
+    setNewPassInput("");
+    setConfirmPassInput("");
+
+    if (ok) {
+      setPassChangeFeedback({
+        type: "success",
+        text: "Admin passkey updated and synced to cloud!",
+      });
+    } else {
+      setPassChangeFeedback({
+        type: "error",
+        text: "Saved locally, but cloud sync failed. Check network/API.",
+      });
+    }
+  };
+
   const handleResetAll = async () => {
     if (window.confirm("Reset all sections back to default portfolio data?")) {
-      await persistData(defaultPortfolioData);
+      await persistData({
+        ...defaultPortfolioData,
+        adminPasskey: data?.adminPasskey || DEFAULT_ADMIN_PASSKEY,
+      });
     }
   };
 
@@ -182,7 +239,6 @@ export default function AdminPortal({ data, setData }) {
     await persistData({ ...data, [listKey]: list });
   };
 
-  // Projects Handlers
   const handleSaveProject = async (e) => {
     e.preventDefault();
     const techArray = projectForm.techText
@@ -231,7 +287,7 @@ export default function AdminPortal({ data, setData }) {
       description: "",
       techText: "",
       liveUrl: "",
-      githubUrl: "https://github.com/shanmukhaanjaneyareddy",
+      githubUrl: "https://github.com/",
     });
   };
 
@@ -257,7 +313,6 @@ export default function AdminPortal({ data, setData }) {
     });
   };
 
-  // Skills Handlers
   const handleAddCategory = (e) => {
     e.preventDefault();
     if (!newCategoryName.trim()) return;
@@ -299,7 +354,6 @@ export default function AdminPortal({ data, setData }) {
     persistData({ ...data, skills: updatedSkills });
   };
 
-  // Education Handlers (Add + Edit)
   const handleSaveEducation = async (e) => {
     e.preventDefault();
     if (!eduForm.degree.trim() || !eduForm.institution.trim()) return;
@@ -345,7 +399,6 @@ export default function AdminPortal({ data, setData }) {
     });
   };
 
-  // Internships Handlers (Add + Edit)
   const handleSaveInternship = async (e) => {
     e.preventDefault();
     if (!internForm.role.trim() || !internForm.organization.trim()) return;
@@ -392,7 +445,6 @@ export default function AdminPortal({ data, setData }) {
     });
   };
 
-  // Certifications Handlers (Add + Edit)
   const handleSaveCertification = async (e) => {
     e.preventDefault();
     if (!certForm.title.trim() || !certForm.issuer.trim()) return;
@@ -480,7 +532,7 @@ export default function AdminPortal({ data, setData }) {
 
             <button
               type="submit"
-              className="w-full py-3 rounded-xl bg-accent-primary text-dark-950 font-semibold text-sm hover:bg-sky-300 transition-colors"
+              className="w-full py-3 rounded-xl bg-accent-primary text-dark-950 font-semibold text-sm hover:opacity-90 transition-opacity"
             >
               Unlock Dashboard
             </button>
@@ -559,7 +611,7 @@ export default function AdminPortal({ data, setData }) {
 
             <a
               href="/"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-accent-primary text-dark-950 text-xs font-semibold hover:bg-sky-300"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-accent-primary text-dark-950 text-xs font-semibold hover:opacity-90"
             >
               <ArrowLeft className="w-4 h-4" />
               View Public Site
@@ -589,144 +641,228 @@ export default function AdminPortal({ data, setData }) {
         </div>
 
         {activeTab === "general" && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              persistData(data);
-            }}
-            className="rounded-2xl glass-card p-6 sm:p-8 space-y-6"
-          >
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h2 className="text-lg font-bold">
-                Navbar, Hero Bio &amp; Google Drive Resume
-              </h2>
-              <button
-                type="submit"
-                className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-accent-primary text-dark-950 font-semibold text-xs hover:bg-sky-300"
-              >
-                <Save className="w-4 h-4" />
-                Save Changes
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-mono text-slate-400 mb-1.5">
-                  NAVBAR BRAND (LEFT)
-                </label>
-                <input
-                  type="text"
-                  value={data.personal.brandMain}
-                  onChange={(e) => updatePersonalField("brandMain", e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
-                />
+          <div className="space-y-8">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                persistData(data);
+              }}
+              className="rounded-2xl glass-card p-6 sm:p-8 space-y-6"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <h2 className="text-lg font-bold">
+                  Navbar, Hero Bio &amp; Google Drive Resume
+                </h2>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-accent-primary text-dark-950 font-semibold text-xs hover:opacity-90"
+                >
+                  <Save className="w-4 h-4" />
+                  Save Changes
+                </button>
               </div>
 
-              <div>
-                <label className="block text-xs font-mono text-slate-400 mb-1.5">
-                  NAVBAR BRAND (ACCENT)
-                </label>
-                <input
-                  type="text"
-                  value={data.personal.brandAccent}
-                  onChange={(e) => updatePersonalField("brandAccent", e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-mono text-slate-400 mb-1.5">
+                    NAVBAR BRAND (LEFT)
+                  </label>
+                  <input
+                    type="text"
+                    value={data.personal.brandMain}
+                    onChange={(e) => updatePersonalField("brandMain", e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono text-slate-400 mb-1.5">
+                    NAVBAR BRAND (ACCENT)
+                  </label>
+                  <input
+                    type="text"
+                    value={data.personal.brandAccent}
+                    onChange={(e) => updatePersonalField("brandAccent", e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-mono text-slate-400 mb-1.5">
+                    FULL NAME
+                  </label>
+                  <input
+                    type="text"
+                    value={data.personal.name}
+                    onChange={(e) => updatePersonalField("name", e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-mono text-slate-400 mb-1.5">
+                    ROLE / SUBTITLE
+                  </label>
+                  <input
+                    type="text"
+                    value={data.personal.role}
+                    onChange={(e) => updatePersonalField("role", e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-mono text-slate-400 mb-1.5">
+                    HERO BIO TAGLINE
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={data.personal.tagline}
+                    onChange={(e) => updatePersonalField("tagline", e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 p-4 rounded-xl bg-dark-900/80 border border-accent-primary/20 space-y-2">
+                  <label className="block text-xs font-mono text-accent-primary">
+                    GOOGLE DRIVE RESUME LINK (AUTO-DOWNLOADS FOR ALL VISITORS)
+                  </label>
+                  <input
+                    type="url"
+                    value={data.personal.defaultResumeUrl}
+                    onChange={(e) =>
+                      updatePersonalField("defaultResumeUrl", e.target.value)
+                    }
+                    placeholder="https://drive.google.com/file/d/YOUR_FILE_ID/view?usp=sharing"
+                    className="w-full px-4 py-2.5 rounded-xl bg-dark-950 border border-white/10 text-sm"
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 pt-1">
+                    <span className="truncate max-w-lg">
+                      Direct Download URL:{" "}
+                      <code className="text-slate-200">
+                        {getDirectDriveDownloadUrl(data.personal.defaultResumeUrl)}
+                      </code>
+                    </span>
+                    <a
+                      href={getDirectDriveDownloadUrl(
+                        data.personal.defaultResumeUrl
+                      )}
+                      className="inline-flex items-center gap-1 text-accent-primary hover:underline"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Test Auto-Download
+                    </a>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono text-slate-400 mb-1.5">
+                    GITHUB URL
+                  </label>
+                  <input
+                    type="url"
+                    value={data.personal.socials.github}
+                    onChange={(e) => updateSocialField("github", e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono text-slate-400 mb-1.5">
+                    LINKEDIN URL
+                  </label>
+                  <input
+                    type="url"
+                    value={data.personal.socials.linkedin}
+                    onChange={(e) => updateSocialField("linkedin", e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                  />
+                </div>
+              </div>
+            </form>
+
+            {/* Change Admin Passkey Card */}
+            <form
+              onSubmit={handleChangePasskey}
+              className="rounded-2xl glass-card p-6 sm:p-8 space-y-5"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <KeyRound className="w-5 h-5 text-accent-primary" />
+                  <div>
+                    <h2 className="text-lg font-bold">Change Admin Passkey</h2>
+                    <p className="text-xs text-slate-400">
+                      Update your /admin login password (synced across all devices via Supabase).
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-accent-primary text-dark-950 font-semibold text-xs hover:opacity-90"
+                >
+                  <Save className="w-4 h-4" />
+                  Update Passkey
+                </button>
               </div>
 
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-mono text-slate-400 mb-1.5">
-                  FULL NAME
-                </label>
-                <input
-                  type="text"
-                  value={data.personal.name}
-                  onChange={(e) => updatePersonalField("name", e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
-                />
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-mono text-slate-400 mb-1.5">
+                    CURRENT PASSKEY
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={currentPassInput}
+                    onChange={(e) => setCurrentPassInput(e.target.value)}
+                    placeholder="Current passkey"
+                    className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                  />
+                </div>
 
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-mono text-slate-400 mb-1.5">
-                  ROLE / SUBTITLE
-                </label>
-                <input
-                  type="text"
-                  value={data.personal.role}
-                  onChange={(e) => updatePersonalField("role", e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
-                />
-              </div>
+                <div>
+                  <label className="block text-xs font-mono text-slate-400 mb-1.5">
+                    NEW PASSKEY
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={newPassInput}
+                    onChange={(e) => setNewPassInput(e.target.value)}
+                    placeholder="New passkey"
+                    className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                  />
+                </div>
 
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-mono text-slate-400 mb-1.5">
-                  HERO BIO TAGLINE
-                </label>
-                <textarea
-                  rows={3}
-                  value={data.personal.tagline}
-                  onChange={(e) => updatePersonalField("tagline", e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
-                />
-              </div>
-
-              <div className="sm:col-span-2 p-4 rounded-xl bg-dark-900/80 border border-accent-primary/20 space-y-2">
-                <label className="block text-xs font-mono text-accent-primary">
-                  GOOGLE DRIVE RESUME LINK (AUTO-DOWNLOADS FOR ALL VISITORS)
-                </label>
-                <input
-                  type="url"
-                  value={data.personal.defaultResumeUrl}
-                  onChange={(e) =>
-                    updatePersonalField("defaultResumeUrl", e.target.value)
-                  }
-                  placeholder="https://drive.google.com/file/d/YOUR_FILE_ID/view?usp=sharing"
-                  className="w-full px-4 py-2.5 rounded-xl bg-dark-950 border border-white/10 text-sm"
-                />
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 pt-1">
-                  <span className="truncate max-w-lg">
-                    Direct Download URL:{" "}
-                    <code className="text-slate-200">
-                      {getDirectDriveDownloadUrl(data.personal.defaultResumeUrl)}
-                    </code>
-                  </span>
-                  <a
-                    href={getDirectDriveDownloadUrl(
-                      data.personal.defaultResumeUrl
-                    )}
-                    className="inline-flex items-center gap-1 text-accent-primary hover:underline"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Test Auto-Download
-                  </a>
+                <div>
+                  <label className="block text-xs font-mono text-slate-400 mb-1.5">
+                    CONFIRM NEW PASSKEY
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={confirmPassInput}
+                    onChange={(e) => setConfirmPassInput(e.target.value)}
+                    placeholder="Re-enter new passkey"
+                    className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
+                  />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-mono text-slate-400 mb-1.5">
-                  GITHUB URL
-                </label>
-                <input
-                  type="url"
-                  value={data.personal.socials.github}
-                  onChange={(e) => updateSocialField("github", e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono text-slate-400 mb-1.5">
-                  LINKEDIN URL
-                </label>
-                <input
-                  type="url"
-                  value={data.personal.socials.linkedin}
-                  onChange={(e) => updateSocialField("linkedin", e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-dark-900 border border-white/10 text-sm"
-                />
-              </div>
-            </div>
-          </form>
+              {passChangeFeedback.text && (
+                <p
+                  className={`text-xs font-medium ${
+                    passChangeFeedback.type === "success"
+                      ? "text-emerald-400"
+                      : "text-rose-400"
+                  }`}
+                >
+                  {passChangeFeedback.text}
+                </p>
+              )}
+            </form>
+          </div>
         )}
 
         {activeTab === "projects" && (
@@ -875,7 +1011,7 @@ export default function AdminPortal({ data, setData }) {
               <div className="flex items-center gap-3 pt-2">
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-primary text-dark-950 font-semibold text-sm hover:bg-sky-300"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-primary text-dark-950 font-semibold text-sm hover:opacity-90"
                 >
                   <Save className="w-4 h-4" />
                   {editingProjectId ? "Update Project" : "Add Project"}
@@ -892,7 +1028,7 @@ export default function AdminPortal({ data, setData }) {
                         description: "",
                         techText: "",
                         liveUrl: "",
-                        githubUrl: "https://github.com/shanmukhaanjaneyareddy",
+                        githubUrl: "https://github.com/",
                       });
                     }}
                     className="px-4 py-2.5 rounded-xl glass-card text-xs text-slate-300"
@@ -988,7 +1124,7 @@ export default function AdminPortal({ data, setData }) {
               />
               <button
                 type="submit"
-                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-accent-primary text-dark-950 font-semibold text-sm hover:bg-sky-300"
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-accent-primary text-dark-950 font-semibold text-sm hover:opacity-90"
               >
                 <Plus className="w-4 h-4" />
                 Add Category
@@ -1067,7 +1203,6 @@ export default function AdminPortal({ data, setData }) {
 
         {activeTab === "credentials" && (
           <div className="space-y-8">
-            {/* Section Display Order Controller */}
             <div className="rounded-2xl glass-card p-6 sm:p-8 space-y-4">
               <div>
                 <h2 className="text-lg font-bold">Section Display Order</h2>
@@ -1097,7 +1232,6 @@ export default function AdminPortal({ data, setData }) {
                         disabled={idx === 0}
                         onClick={() => handleMoveCredentialSection(idx, -1)}
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-xs text-slate-200"
-                        title="Move Section Up"
                       >
                         <ArrowUp className="w-3.5 h-3.5" />
                         Up
@@ -1107,7 +1241,6 @@ export default function AdminPortal({ data, setData }) {
                         disabled={idx === currentOrder.length - 1}
                         onClick={() => handleMoveCredentialSection(idx, 1)}
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-xs text-slate-200"
-                        title="Move Section Down"
                       >
                         <ArrowDown className="w-3.5 h-3.5" />
                         Down
@@ -1118,7 +1251,7 @@ export default function AdminPortal({ data, setData }) {
               </div>
             </div>
 
-            {/* Education Manager (Add, Edit & Reorder) */}
+            {/* Education Manager */}
             <div className="rounded-2xl glass-card p-6 sm:p-8 space-y-5">
               <div>
                 <h2 className="text-lg font-bold">
@@ -1137,7 +1270,7 @@ export default function AdminPortal({ data, setData }) {
                 <input
                   type="text"
                   required
-                  placeholder="Degree / Class (e.g., B.Sc. AI, Intermediate, SSC)"
+                  placeholder="Degree / Class (e.g., B.Sc., Intermediate, SSC)"
                   value={eduForm.degree}
                   onChange={(e) =>
                     setEduForm({ ...eduForm, degree: e.target.value })
@@ -1184,7 +1317,7 @@ export default function AdminPortal({ data, setData }) {
                 <div className="sm:col-span-2 flex items-center gap-3">
                   <button
                     type="submit"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-primary text-dark-950 font-semibold text-xs hover:bg-sky-300"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-primary text-dark-950 font-semibold text-xs hover:opacity-90"
                   >
                     {editingEduId ? (
                       <>
@@ -1248,7 +1381,6 @@ export default function AdminPortal({ data, setData }) {
                         disabled={idx === 0}
                         onClick={() => handleMoveListItem("education", idx, -1)}
                         className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-slate-200"
-                        title="Move Up"
                       >
                         <ArrowUp className="w-3.5 h-3.5" />
                       </button>
@@ -1257,7 +1389,6 @@ export default function AdminPortal({ data, setData }) {
                         disabled={idx === educationList.length - 1}
                         onClick={() => handleMoveListItem("education", idx, 1)}
                         className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-slate-200"
-                        title="Move Down"
                       >
                         <ArrowDown className="w-3.5 h-3.5" />
                       </button>
@@ -1265,7 +1396,6 @@ export default function AdminPortal({ data, setData }) {
                         type="button"
                         onClick={() => handleEditEducationClick(edu)}
                         className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-slate-200"
-                        title="Edit Education"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                         Edit
@@ -1274,7 +1404,6 @@ export default function AdminPortal({ data, setData }) {
                         type="button"
                         onClick={() => handleDeleteEducation(edu.id)}
                         className="p-2 text-rose-400 hover:bg-white/5 rounded-lg"
-                        title="Delete"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -1284,7 +1413,7 @@ export default function AdminPortal({ data, setData }) {
               </div>
             </div>
 
-            {/* Internships Manager (Add, Edit & Reorder) */}
+            {/* Internships Manager */}
             <div className="rounded-2xl glass-card p-6 sm:p-8 space-y-5">
               <div>
                 <h2 className="text-lg font-bold">
@@ -1313,7 +1442,7 @@ export default function AdminPortal({ data, setData }) {
                 <input
                   type="text"
                   required
-                  placeholder="Organization (e.g., Deloitte Australia / Forage)"
+                  placeholder="Organization"
                   value={internForm.organization}
                   onChange={(e) =>
                     setInternForm({
@@ -1347,7 +1476,7 @@ export default function AdminPortal({ data, setData }) {
                 <div className="sm:col-span-2 flex items-center gap-3">
                   <button
                     type="submit"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-primary text-dark-950 font-semibold text-xs hover:bg-sky-300"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-primary text-dark-950 font-semibold text-xs hover:opacity-90"
                   >
                     {editingInternId ? (
                       <>
@@ -1407,7 +1536,6 @@ export default function AdminPortal({ data, setData }) {
                           handleMoveListItem("internships", idx, -1)
                         }
                         className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-slate-200"
-                        title="Move Up"
                       >
                         <ArrowUp className="w-3.5 h-3.5" />
                       </button>
@@ -1418,7 +1546,6 @@ export default function AdminPortal({ data, setData }) {
                           handleMoveListItem("internships", idx, 1)
                         }
                         className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-slate-200"
-                        title="Move Down"
                       >
                         <ArrowDown className="w-3.5 h-3.5" />
                       </button>
@@ -1426,7 +1553,6 @@ export default function AdminPortal({ data, setData }) {
                         type="button"
                         onClick={() => handleEditInternshipClick(intern)}
                         className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-slate-200"
-                        title="Edit Internship"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                         Edit
@@ -1435,7 +1561,6 @@ export default function AdminPortal({ data, setData }) {
                         type="button"
                         onClick={() => handleDeleteInternship(intern.id)}
                         className="p-2 text-rose-400 hover:bg-white/5 rounded-lg"
-                        title="Delete"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -1445,7 +1570,7 @@ export default function AdminPortal({ data, setData }) {
               </div>
             </div>
 
-            {/* Certifications Manager (Add, Edit & Reorder) */}
+            {/* Certifications Manager */}
             <div className="rounded-2xl glass-card p-6 sm:p-8 space-y-5">
               <div>
                 <h2 className="text-lg font-bold">
@@ -1472,7 +1597,7 @@ export default function AdminPortal({ data, setData }) {
                 <input
                   type="text"
                   required
-                  placeholder="Issuing Organization (e.g., Microsoft & LinkedIn)"
+                  placeholder="Issuing Organization"
                   value={certForm.issuer}
                   onChange={(e) =>
                     setCertForm({ ...certForm, issuer: e.target.value })
@@ -1503,7 +1628,7 @@ export default function AdminPortal({ data, setData }) {
                 <div className="sm:col-span-2 flex items-center gap-3">
                   <button
                     type="submit"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-primary text-dark-950 font-semibold text-xs hover:bg-sky-300"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-primary text-dark-950 font-semibold text-xs hover:opacity-90"
                   >
                     {editingCertId ? (
                       <>
@@ -1563,7 +1688,6 @@ export default function AdminPortal({ data, setData }) {
                           handleMoveListItem("certifications", idx, -1)
                         }
                         className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-slate-200"
-                        title="Move Up"
                       >
                         <ArrowUp className="w-3.5 h-3.5" />
                       </button>
@@ -1574,7 +1698,6 @@ export default function AdminPortal({ data, setData }) {
                           handleMoveListItem("certifications", idx, 1)
                         }
                         className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-slate-200"
-                        title="Move Down"
                       >
                         <ArrowDown className="w-3.5 h-3.5" />
                       </button>
@@ -1582,7 +1705,6 @@ export default function AdminPortal({ data, setData }) {
                         type="button"
                         onClick={() => handleEditCertificationClick(cert)}
                         className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-slate-200"
-                        title="Edit Certification"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                         Edit
@@ -1591,7 +1713,6 @@ export default function AdminPortal({ data, setData }) {
                         type="button"
                         onClick={() => handleDeleteCertification(cert.id)}
                         className="p-2 text-rose-400 hover:bg-white/5 rounded-lg"
-                        title="Delete"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -1615,7 +1736,7 @@ export default function AdminPortal({ data, setData }) {
               <h2 className="text-lg font-bold">Contact Section &amp; Footer</h2>
               <button
                 type="submit"
-                className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-accent-primary text-dark-950 font-semibold text-xs hover:bg-sky-300"
+                className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-accent-primary text-dark-950 font-semibold text-xs hover:opacity-90"
               >
                 <Save className="w-4 h-4" />
                 Save Changes
